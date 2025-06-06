@@ -1,39 +1,54 @@
 --  1.Task Get numbers of vehicles sold (loans disbursed) in Jan and Feb 2020 per each vehicle make. 
 --  a) Display only those makes where total sales are more than 1000 units
 
+-- Declare dynamic variables
 SET @start_date = '2020-01-01';
-SET @end_date = '2020-02-29';
-SET @total_sales = 1000;
+-- 2020 it was not a leap year so we go
+SET @end_date = '2020-02-29';  
+SET @totalSales = 1000;
 
+-- Run the query using the variables
 SELECT 
-    vm.name AS vehicle_make,
-    COUNT(a.id) AS cars_sold
-FROM `asset-schema`.`asset` a
-JOIN `asset-schema`.`vehicle_model` vmo ON a.model_id = vmo.id
-JOIN `asset-schema`.`vehicle_make` vm ON vmo.vehicle_make_id = vm.id
-JOIN `loan-schema`.`m_loan` ml ON a.m_loan_id = ml.id
-WHERE ml.disbursedon_date BETWEEN @start_date AND @end_date
-GROUP BY vm.name
-HAVING total_sales > @total_sales;
+    vmk.name AS vehicle_make,
+    COUNT(DISTINCT a.id) AS vehicles_sold
+FROM 
+    `loan-schema`.m_loan_transaction t
+JOIN `loan-schema`.m_loan l ON t.loan_id = l.id
+JOIN `asset-schema`.asset a ON a.m_loan_id = l.id
+JOIN `asset-schema`.vehicle_model vm ON a.model_id = vm.id
+JOIN `asset-schema`.vehicle_make vmk ON vm.vehicle_make_id = vmk.id
+WHERE 
+    t.is_reversed = 0
+    AND t.amount > 0
+    AND t.transaction_date BETWEEN @start_date AND @end_date
+GROUP BY 
+    vmk.name
+HAVING 
+    COUNT(DISTINCT a.id) > @totalSales;
+
+
 
 
 
 -- b) Display full sales data including all makes from database (including those where sales are not made)
-DECLARE @start_date DATE = '2020-01-01';
-DECLARE @end_date DATE = '2020-02-29';
+-- Reuse the same date range
+SET @start_date = '2020-01-01';
+SET @end_date = '2020-02-29';
 
 SELECT 
-    vm.name AS vehicle_make,
-    COUNT(a.id) AS cars_sold
-FROM asset-schema.vehicle_make vm
-LEFT JOIN asset-schema.vehicle_model vmo 
-    ON vm.id = vmo.vehicle_make_id
-LEFT JOIN asset-schema.asset a 
-    ON vmo.id = a.model_id
-LEFT JOIN loan-schema.m_loan ml 
-    ON a.m_loan_id = ml.id
-    AND CAST(ml.disbursedon_date AS DATE) BETWEEN @start_date AND @end_date
-GROUP BY vm.name;
+    vmk.name AS vehicle_make,
+    COUNT(DISTINCT a.id) AS vehicles_sold
+FROM 
+    `asset-schema`.vehicle_make vmk
+LEFT JOIN `asset-schema`.vehicle_model vm ON vm.vehicle_make_id = vmk.id
+LEFT JOIN `asset-schema`.asset a ON a.model_id = vm.id
+LEFT JOIN `loan-schema`.m_loan l ON l.id = a.m_loan_id
+LEFT JOIN `loan-schema`.m_loan_transaction t ON t.loan_id = l.id 
+    AND t.is_reversed = 0
+    AND t.amount > 0
+    AND t.transaction_date BETWEEN @start_date AND @end_date
+GROUP BY 
+    vmk.name;
 
 
 
@@ -63,7 +78,8 @@ ORDER BY
     l.id;
 
 -- 3. Task
--- Calculate current balance (scheduled amount - payed amount) for each loan. Use tables m_loan_repayment_schedule for payment schedule data. Total scheduled payment amount on current date must be calculated by sum of all amount field values. Some values can be null. Payment data are stored in table m_loan_transaction.
+-- Calculate current balance (scheduled amount - payed amount) for each loan. Use tables m_loan_repayment_schedule for payment schedule data. 
+-- Total scheduled payment amount on current date must be calculated by sum of all amount field values. Some values can be null. Payment data are stored in table m_loan_transaction.
 SELECT 
     l.id AS loan_id,
     l.account_no,
